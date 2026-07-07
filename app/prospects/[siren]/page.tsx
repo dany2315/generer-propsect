@@ -173,6 +173,7 @@ export default async function ProspectPage({ params }: { params: PageParams }) {
   const rneHistory = asArray(rneExtracted?.history ?? rneSummary?.history);
   const rneEstablishments = asArray(rneExtracted?.establishments ?? rneSummary?.establishments);
   const hasRneData = Boolean(rneExtracted || rneSummary);
+  const creationDate = rneExtracted?.creation_date ?? rneSummary?.creationDate ?? prospect.creationDate;
   const webContactRows = await prisma.$queryRawUnsafe<
     Array<{
       status: string;
@@ -263,6 +264,10 @@ export default async function ProspectPage({ params }: { params: PageParams }) {
             <div>
               <span className="label">Statut</span>
               <strong>{statusLabels[prospect.status]}</strong>
+            </div>
+            <div>
+              <span className="label">Creation SCI</span>
+              <strong>{formatDateText(creationDate)}</strong>
             </div>
             <div>
               <span className="label">Adresses detectees</span>
