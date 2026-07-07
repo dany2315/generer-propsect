@@ -81,8 +81,8 @@ function extractRepresentatives(value: any): RneSummary["representatives"] {
     .filter((item) => item?.actif !== false)
     .map((item) => {
       const individual = item.individu?.descriptionPersonne;
-      const legal = item.entreprise?.entreprise ?? item.personneMorale?.identite?.entreprise;
-      const address = item.individu?.adresseDomicile ?? item.entreprise?.adresseEntreprise?.adresse;
+      const legal = item.entreprise ?? item.entreprise?.entreprise ?? item.personneMorale?.identite?.entreprise;
+      const address = item.individu?.adresseDomicile ?? item.adresseEntreprise ?? item.entreprise?.adresseEntreprise?.adresse;
       const name = individual
         ? [asArray(individual.prenoms).join(" "), individual.nomUsage ?? individual.nom].filter(Boolean).join(" ")
         : legal?.denomination ?? "Representant non nomme";
@@ -179,6 +179,7 @@ function roleLabel(code?: string | null, fallback?: string | null) {
     "29": "Gerant",
     "30": "Co-gerant",
     "71": "Associe",
+    "75": "Associe personne morale",
     "99": fallback || "Autre role",
   };
   return code ? labels[code] ?? fallback ?? `Role ${code}` : fallback ?? "Role non precise";
