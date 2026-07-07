@@ -1,0 +1,54 @@
+name: Prospect workers
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 */2 * * *"
+
+concurrency:
+  group: prospect-workers
+  cancel-in-progress: false
+
+jobs:
+  run-workers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      BRAVE_SEARCH_API_KEY: ${{ secrets.BRAVE_SEARCH_API_KEY }}
+      SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+      SIRENE_API_BASE_URL: ${{ secrets.SIRENE_API_BASE_URL }}
+      SIRENE_BEARER_TOKEN: ${{ secrets.SIRENE_BEARER_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npm run db:generate
+
+      - name: Collecte SCI (recherche-entreprises.api.gouv.fr)
+        run: npm run collect:once
+
+      - name: Enrichissement de base
+        run: npm run enrich:once
+
+      - name: Extraction des etablissements
+        run: npm run extract:establishments:once
+
+      - name: Enrichissement web (site officiel, email, LinkedIn)
+        run: npm run enrich:web:once
+
+      - name: Decouverte de pistes de contact (dirigeants)
+        run: npm run discover:contacts:once
+
+      - name: Enrichissement Sirene complet (no-op tant que SIRENE_BEARER_TOKEN n'est pas configure)
+        run: npm run enrich:sirene:once

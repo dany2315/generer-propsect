@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProspectStatus {
+  A_ENRICHIR
+  A_CONTACTER
+  CONTACTE
+  RELANCE
+  EXCLU
+}
+
+enum ContactType {
+  EMAIL
+  PHONE
+  WEBSITE
+  LINKEDIN
+  OTHER
+}
+
+enum ContactStatus {
+  TO_VERIFY
+  VERIFIED
+  REJECTED
+}
+
+model Prospect {
+  siren              String         @id
+  siretSiege         String?
+  name               String
+  activity           String?
+  legalForm          String?
+  companyCategory    String?
+  creationDate       DateTime?
+  openEstablishments Int?
+  address            String?
+  postalCode         String?
+  city               String?
+  department         String?
+  region             String?
+  latitude           Float?
+  longitude          Float?
+  leadersText        String?
+  leaders            Json?
+  score              Int            @default(0)
+  scoreReasons       String[]
+  source             String
+  raw                Json
+  status             ProspectStatus @default(A_ENRICHIR)
+  notes              String         @default("")
+  contactedAt        DateTime?
+  firstSeenAt        DateTime       @default(now())
+  lastSeenAt         DateTime       @updatedAt
+  collectedAt        DateTime       @default(now())
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  enrichments        ProspectEnrichment[]
+  signals            ProspectSignal[]
+  contactPoints      ContactPoint[]
+
+  @@index([score])
+  @@index([status])
+  @@index([department])
+  @@index([activity])
+  @@index([lastSeenAt])
+}
+
+model ProspectEnrichment {
+  id            String   @id @default(cuid())
+  prospectSiren String
+  prospect      Prospect @relation(fields: [prospectSiren], references: [siren], onDelete: Cascade)
+  source        String
+  sourceType    String
+  confidence    Float    @default(0.5)
+  payload       Json
+  createdAt     DateTime @default(now())
+
+  @@index([prospectSiren])
+  @@index([source])
+}
+
+model ProspectSignal {
+  id            String   @id @default(cuid())
+  prospectSiren String
+  prospect      Prospect @relation(fields: [prospectSiren], references: [siren], onDelete: Cascade)
+  key           String
+  label         String
+  value         String
+  numericValue  Float?
+  confidence    Float    @default(0.7)
+  source        String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([prospectSiren, key])
+  @@index([key])
+  @@index([numericValue])
+}
+
+model ContactPoint {
+  id            String        @id @default(cuid())
+  prospectSiren String
+  prospect      Prospect      @relation(fields: [prospectSiren], references: [siren], onDelete: Cascade)
+  type          ContactType
+  value         String
+  source        String
+  confidence    Float         @default(0.4)
+  status        ContactStatus @default(TO_VERIFY)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([prospectSiren, type, value])
+  @@index([type])
+  @@index([status])
+}
+
+model CollectionCheckpoint {
+  scope       String    @id
+  nextPage    Int       @default(1)
+  totalPages  Int?
+  completedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+}
