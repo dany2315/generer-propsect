@@ -56,18 +56,20 @@ export async function ensureContactLeadTables() {
 }
 
 /** Recherche manuelle declenchee par le bouton "Pistes web" sur la fiche prospect. */
-export async function discoverContactLeadsForSiren(siren: string) {
+export async function discoverContactLeadsForSiren(siren: string, options: { ignoreCooldown?: boolean } = {}) {
   await ensureContactLeadTables();
 
   const settings = await getSearchSettings(JOB_NAME);
-  const rows = await prisma.$queryRaw<Array<{ attempted_at: Date }>>`
-    SELECT attempted_at FROM contact_lead_manual_attempts WHERE prospect_siren = ${siren}
-  `;
-  const lastAttempt = rows[0]?.attempted_at;
-  if (lastAttempt) {
-    const elapsedMinutes = (Date.now() - new Date(lastAttempt).getTime()) / 60_000;
-    if (elapsedMinutes < settings.minIntervalMinutes) {
-      throw new SearchCooldownError(settings.minIntervalMinutes);
+  if (!options.ignoreCooldown) {
+    const rows = await prisma.$queryRaw<Array<{ attempted_at: Date }>>`
+      SELECT attempted_at FROM contact_lead_manual_attempts WHERE prospect_siren = ${siren}
+    `;
+    const lastAttempt = rows[0]?.attempted_at;
+    if (lastAttempt) {
+      const elapsedMinutes = (Date.now() - new Date(lastAttempt).getTime()) / 60_000;
+      if (elapsedMinutes < settings.minIntervalMinutes) {
+        throw new SearchCooldownError(settings.minIntervalMinutes);
+      }
     }
   }
 

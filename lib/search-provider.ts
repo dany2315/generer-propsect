@@ -29,16 +29,22 @@ export type SearchSettings = {
 };
 
 export class SearchQuotaExceededError extends Error {
+  readonly limit: number;
+
   constructor(jobName: string, limit: number) {
     super(`Quota de recherche quotidien atteint (${limit}).`);
     this.name = "SearchQuotaExceededError";
+    this.limit = limit;
   }
 }
 
 export class SearchCooldownError extends Error {
+  readonly minutes: number;
+
   constructor(minutes: number) {
     super(`Ce prospect a deja ete recherche il y a moins de ${minutes} minutes. Reessaie plus tard.`);
     this.name = "SearchCooldownError";
+    this.minutes = minutes;
   }
 }
 

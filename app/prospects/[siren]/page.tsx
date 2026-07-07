@@ -17,9 +17,11 @@ const statusLabels: Record<ProspectStatus, string> = {
 };
 
 type PageParams = Promise<{ siren: string }>;
+type PageSearchParams = Promise<Record<string, string | string[] | undefined>>;
 
-export default async function ProspectPage({ params }: { params: PageParams }) {
+export default async function ProspectPage({ params, searchParams }: { params: PageParams; searchParams: PageSearchParams }) {
   const { siren } = await params;
+  const query = await searchParams;
   const prospect = await prisma.prospect.findUnique({
     where: { siren },
     include: {
@@ -217,6 +219,12 @@ export default async function ProspectPage({ params }: { params: PageParams }) {
   ).catch(() => []);
   const canSearchWeb = !["A_CONTACTER", "CONTACTE", "EXCLU"].includes(prospect.status);
   const keptContactLeads = contactLeads.filter((lead) => lead.status === "KEPT");
+  const prospectDialog = firstQueryValue(query.prospectDialog);
+  const cooldownMinutes = firstQueryValue(query.minutes) ?? "60";
+  const quotaLimit = firstQueryValue(query.limit);
+  const savedLeadCount = Number(firstQueryValue(query.saved) ?? "0");
+  const wasForcedSearch = firstQueryValue(query.forced) === "1";
+  const closeDialogHref = `/prospects/${prospect.siren}`;
 
   return (
     <main className="shell">
@@ -233,6 +241,66 @@ export default async function ProspectPage({ params }: { params: PageParams }) {
           </div>
         </div>
       </header>
+
+      {prospectDialog === "web-search-cooldown" ? (
+        <div className="dialogOverlay" role="dialog" aria-modal="true" aria-labelledby="prospectDialogTitle">
+          <div className="dialogBox">
+            <span className="label">Recherche deja lancee</span>
+            <h2 id="prospectDialogTitle">Attends avant de relancer les pistes web</h2>
+            <p>
+              Ce prospect a deja ete recherche il y a moins de {cooldownMinutes} minutes. Cette limite evite de consommer
+              inutilement les recherches et de relancer plusieurs fois le meme enrichissement.
+            </p>
+            <div className="dialogActions">
+              <Link href={closeDialogHref} className="button secondary">
+                Fermer
+              </Link>
+              <form action={discoverContactLeadsAction}>
+                <input type="hidden" name="siren" value={prospect.siren} />
+                <input type="hidden" name="returnTo" value={closeDialogHref} />
+                <input type="hidden" name="forceSearch" value="1" />
+                <button type="submit">Relancer maintenant</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {prospectDialog === "web-search-quota" ? (
+        <div className="dialogOverlay" role="dialog" aria-modal="true" aria-labelledby="prospectDialogTitle">
+          <div className="dialogBox">
+            <span className="label">Quota atteint</span>
+            <h2 id="prospectDialogTitle">Recherche web en pause</h2>
+            <p>
+              Le quota quotidien de recherche web est atteint{quotaLimit ? ` (${quotaLimit} requetes)` : ""}. Les pistes web
+              pourront etre relancees quand le quota sera de nouveau disponible.
+            </p>
+            <Link href={closeDialogHref} className="button">
+              Fermer
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      {prospectDialog === "web-search-done" ? (
+        <div className="dialogOverlay" role="dialog" aria-modal="true" aria-labelledby="prospectDialogTitle">
+          <div className="dialogBox">
+            <span className="label">{wasForcedSearch ? "Relance terminee" : "Recherche terminee"}</span>
+            <h2 id="prospectDialogTitle">
+              {savedLeadCount > 0
+                ? `${savedLeadCount} nouvelle${savedLeadCount > 1 ? "s" : ""} piste${savedLeadCount > 1 ? "s" : ""} ajoutee${savedLeadCount > 1 ? "s" : ""}`
+                : "Aucune nouvelle piste fiable"}
+            </h2>
+            <p>
+              La recherche web s'est bien executee. Si aucune piste n'a ete ajoutee, c'est que les resultats etaient deja
+              presents ou pas assez rattaches a cette SCI.
+            </p>
+            <Link href={closeDialogHref} className="button">
+              Fermer
+            </Link>
+          </div>
+        </div>
+      ) : null}
 
       <div className="content prospectDetail">
         <section className={keptContactLeads.length > 0 ? "prospectHero prospectHeroReady" : "prospectHero"}>
@@ -424,6 +492,7 @@ export default async function ProspectPage({ params }: { params: PageParams }) {
                         <span className={lead.status === "KEPT" ? "pill strong" : "pill mutedPill"}>
                           {lead.status === "KEPT" ? "gardee" : "a verifier"}
                         </span>
+                        {lead.confidence < 0.48 ? <span className="pill weakPill">correspondance faible</span> : null}
                         <span className="pill mutedPill">{Math.round(lead.confidence * 100)}% confiance</span>
                       </div>
                       <strong>
@@ -698,4 +767,8 @@ function formatDateText(value?: string | Date | null) {
 
 function asArray(value: unknown) {
   return Array.isArray(value) ? value : [];
+}
+
+function firstQueryValue(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
 }

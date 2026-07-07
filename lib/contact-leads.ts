@@ -66,15 +66,25 @@ export function classifyLeadSource(
   let confidence = 0.35;
   const companyTokens = normalizeCompanyName(prospect.name).split(" ").filter((token) => token.length >= 3);
   const entityTokens = normalizeCompanyName(plan.entity).split(" ").filter((token) => token.length >= 3);
+  const hasCompanyEvidence =
+    haystack.includes(prospect.siren) ||
+    companyTokens.some((token) => haystack.includes(token)) ||
+    Boolean(prospect.city && haystack.includes(prospect.city.toLowerCase()));
+  const hasEntityEvidence = entityTokens.some((token) => haystack.includes(token));
+  const weakIdentityMatch = plan.kind !== "company" && !hasCompanyEvidence;
 
-  if (entityTokens.some((token) => haystack.includes(token))) confidence += 0.18;
+  if (hasEntityEvidence) confidence += 0.18;
   if (companyTokens.some((token) => haystack.includes(token))) confidence += 0.12;
   if (prospect.city && haystack.includes(prospect.city.toLowerCase())) confidence += 0.08;
   if (/linkedin\.com\/in|linkedin\.com\/company/.test(result.url)) confidence += 0.12;
   if (/contact|mentions|equipe|team|about|a-propos/.test(result.url)) confidence += 0.08;
   if (result.url.includes(prospect.siren) && plan.kind !== "company") confidence -= 0.18;
+  if (weakIdentityMatch) {
+    if (!hasEntityEvidence) return null;
+    confidence = Math.min(confidence, 0.34);
+  }
 
-  if (confidence < 0.48) return null;
+  if (!weakIdentityMatch && confidence < 0.48) return null;
 
   return {
     leadType: plan.kind,
@@ -83,7 +93,7 @@ export function classifyLeadSource(
     snippet: result.snippet ?? "",
     sourceDomain: host,
     confidence: Math.min(confidence, 0.86),
-    reason: reasonFor(plan.kind),
+    reason: weakIdentityMatch ? weakReasonFor(plan.kind) : reasonFor(plan.kind),
   };
 }
 
@@ -94,6 +104,17 @@ function reasonFor(kind: QueryPlan["kind"]) {
     establishment: "Trouve via un nom commercial ou etablissement rattache.",
     address: "Trouve via une adresse rattachee a la SCI.",
     company: "Trouve via le nom et le SIREN de la SCI.",
+  };
+  return reasons[kind];
+}
+
+function weakReasonFor(kind: QueryPlan["kind"]) {
+  const reasons: Record<QueryPlan["kind"], string> = {
+    leader: "Correspondance faible : resultat trouve via le nom du dirigeant, mais sans lien clair avec la SCI, le SIREN ou la ville.",
+    corporate_leader: "Correspondance faible : resultat trouve via une personne morale liee, mais sans lien clair avec cette SCI.",
+    establishment: "Correspondance faible : resultat trouve via un etablissement, mais sans rattachement clair a cette SCI.",
+    address: "Correspondance faible : resultat trouve via une adresse, mais sans rattachement clair a cette SCI.",
+    company: "Correspondance faible.",
   };
   return reasons[kind];
 }
