@@ -1,5 +1,12 @@
 import { prisma } from "../lib/prisma";
 import { discoverContactLeadsBatch, ensureContactLeadTables } from "../lib/contact-lead-runner";
+import {
+  getSearchSettings,
+  isProviderConfigured,
+  PROVIDER_ENV_VAR,
+  PROVIDER_LABELS,
+  JOB_DISCOVER_CONTACTS,
+} from "../lib/search-provider";
 
 type Args = {
   batch: number;
@@ -23,8 +30,12 @@ async function main() {
   const args = parseArgs();
   await ensureContactLeadTables();
 
-  if (!process.env.BRAVE_SEARCH_API_KEY) {
-    console.log("Contact leads pret, mais BRAVE_SEARCH_API_KEY manque dans .env.");
+  const settings = await getSearchSettings(JOB_DISCOVER_CONTACTS);
+  if (!isProviderConfigured(settings.provider) && !(settings.fallbackProvider && isProviderConfigured(settings.fallbackProvider))) {
+    console.log(
+      `Contact leads pret, mais aucune cle configuree pour le fournisseur ${PROVIDER_LABELS[settings.provider]} ` +
+        `(variable ${PROVIDER_ENV_VAR[settings.provider]} manquante dans .env). Fournisseur configurable dans /settings.`,
+    );
     return;
   }
 

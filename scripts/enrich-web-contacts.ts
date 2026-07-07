@@ -9,7 +9,6 @@ import {
   rankWebsiteCandidates,
   type ContactCandidate,
   type SearchResult,
-  unique,
 } from "../lib/web-contact";
 
 type Args = {

@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "./prisma";
-import { buildSearchQueriesForLead, classifyLeadSource, type LeadSearchResult } from "./contact-leads";
+import { buildSearchQueriesForLead, classifyLeadSource } from "./contact-leads";
+import {
+  search as runSearch,
+  getSearchSettings,
+  SearchQuotaExceededError,
+  SearchCooldownError,
+  JOB_DISCOVER_CONTACTS as JOB_NAME,
+} from "./search-provider";
 
 type ProspectLeadInput = {
   siren: string;
@@ -38,10 +45,31 @@ export async function ensureContactLeadTables() {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS contact_leads_status_idx ON contact_leads (status)
   `);
+
+  // Cooldown par prospect specifique au bouton "Pistes web" (pas utilise par le batch automatique).
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS contact_lead_manual_attempts (
+      prospect_siren TEXT PRIMARY KEY,
+      attempted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
 }
 
+/** Recherche manuelle declenchee par le bouton "Pistes web" sur la fiche prospect. */
 export async function discoverContactLeadsForSiren(siren: string) {
   await ensureContactLeadTables();
+
+  const settings = await getSearchSettings(JOB_NAME);
+  const rows = await prisma.$queryRaw<Array<{ attempted_at: Date }>>`
+    SELECT attempted_at FROM contact_lead_manual_attempts WHERE prospect_siren = ${siren}
+  `;
+  const lastAttempt = rows[0]?.attempted_at;
+  if (lastAttempt) {
+    const elapsedMinutes = (Date.now() - new Date(lastAttempt).getTime()) / 60_000;
+    if (elapsedMinutes < settings.minIntervalMinutes) {
+      throw new SearchCooldownError(settings.minIntervalMinutes);
+    }
+  }
 
   const prospect = await prisma.prospect.findUnique({
     where: { siren },
@@ -57,9 +85,17 @@ export async function discoverContactLeadsForSiren(siren: string) {
   });
 
   if (!prospect) throw new Error("Prospect introuvable");
-  return discoverForProspect(prospect);
+
+  const saved = await discoverForProspect(prospect);
+  await prisma.$executeRaw`
+    INSERT INTO contact_lead_manual_attempts (prospect_siren, attempted_at)
+    VALUES (${siren}, now())
+    ON CONFLICT (prospect_siren) DO UPDATE SET attempted_at = now()
+  `;
+  return saved;
 }
 
+/** Utilise par le worker automatique (script discover-contact-leads.ts / GitHub Actions). */
 export async function discoverContactLeadsBatch(batch: number) {
   await ensureContactLeadTables();
 
@@ -86,10 +122,18 @@ export async function discoverContactLeadsBatch(batch: number) {
 
   const results = [];
   for (const prospect of prospects) {
-    results.push({
-      prospect,
-      saved: await discoverForProspect(prospect),
-    });
+    try {
+      results.push({
+        prospect,
+        saved: await discoverForProspect(prospect),
+      });
+    } catch (error) {
+      if (error instanceof SearchQuotaExceededError) {
+        console.log(`${error.message} Arret du batch (${results.length}/${prospects.length} traites).`);
+        break;
+      }
+      throw error;
+    }
   }
 
   return results;
@@ -110,7 +154,7 @@ async function discoverForProspect(prospect: ProspectLeadInput) {
 
   for (const plan of queryPlans) {
     let savedForPlan = 0;
-    const results = await searchWeb(plan.query);
+    const results = await runSearch(JOB_NAME, plan.query);
     for (const result of results) {
       const classified = classifyLeadSource(result, plan, prospect);
       if (await saveLead(prospect.siren, plan.entity, classified)) {
@@ -123,33 +167,6 @@ async function discoverForProspect(prospect: ProspectLeadInput) {
   }
 
   return saved;
-}
-
-async function searchWeb(query: string): Promise<LeadSearchResult[]> {
-  if (!process.env.BRAVE_SEARCH_API_KEY) {
-    throw new Error("BRAVE_SEARCH_API_KEY manquant dans .env");
-  }
-
-  const url = new URL("https://api.search.brave.com/res/v1/web/search");
-  url.searchParams.set("q", query);
-  url.searchParams.set("country", "FR");
-  url.searchParams.set("search_lang", "fr");
-  url.searchParams.set("count", "8");
-
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/json",
-      "X-Subscription-Token": process.env.BRAVE_SEARCH_API_KEY,
-    },
-  });
-  if (!response.ok) throw new Error(`Brave Search HTTP ${response.status}`);
-
-  const payload = await response.json();
-  return (payload.web?.results ?? []).map((item: any) => ({
-    title: item.title ?? "",
-    url: item.url ?? "",
-    snippet: item.description ?? "",
-  }));
 }
 
 async function saveLead(prospectSiren: string, searchedEntity: string, result: ReturnType<typeof classifyLeadSource>) {
