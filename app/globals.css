@@ -491,6 +491,51 @@ td small {
   background: #fbfcfd;
 }
 
+.rnePanel {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.rneOverview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+
+.rneOverview > div,
+.rneTextBlock,
+.rneRepresentativeList > div,
+.rneTimeline > div,
+.rneEstablishmentList > div {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px;
+  background: #fbfcfd;
+}
+
+.rneTextBlock p,
+.rneTimeline p,
+.rneEstablishmentList p {
+  margin: 4px 0 0;
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.rneRepresentativeList,
+.rneTimeline,
+.rneEstablishmentList {
+  display: grid;
+  gap: 10px;
+}
+
+.rneRepresentativeList > div {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
 .section {
   border: 1px solid var(--line);
   border-radius: 8px;
