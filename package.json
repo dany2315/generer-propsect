@@ -30,7 +30,9 @@
     "inpi:ftp:inventory": "tsx scripts/inpi-ftp-inventory.ts",
     "inpi:ftp:download": "tsx scripts/inpi-ftp-download.ts",
     "inpi:rne:index": "tsx scripts/index-rne-formalites.ts",
-    "inpi:rne:index:once": "tsx scripts/index-rne-formalites.ts --once --batch 10"
+    "inpi:rne:index:once": "tsx scripts/index-rne-formalites.ts --once --batch 10",
+    "inpi:rne:extract": "tsx scripts/extract-rne-profiles.ts",
+    "inpi:rne:extract:once": "tsx scripts/extract-rne-profiles.ts --once --batch 500"
   },
   "keywords": [],
   "author": "",

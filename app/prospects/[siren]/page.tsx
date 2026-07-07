@@ -136,7 +136,43 @@ export default async function ProspectPage({ params }: { params: PageParams }) {
     `,
     prospect.siren,
   ).catch(() => []);
+  const rneExtractedRows = await prisma.$queryRawUnsafe<
+    Array<{
+      company_name: string | null;
+      legal_form: string | null;
+      creation_date: Date | null;
+      activity_code: string | null;
+      capital: string | null;
+      duration_years: number | null;
+      end_date: Date | null;
+      object_text: string | null;
+      publication_date: Date | null;
+      publication_journal: string | null;
+      representatives_count: number;
+      establishments_count: number;
+      latest_event_date: Date | null;
+      latest_event_label: string | null;
+      rne_updated_at: Date | null;
+      representatives: any;
+      history: any;
+      establishments: any;
+    }>
+  >(
+    `
+      SELECT company_name, legal_form, creation_date, activity_code, capital, duration_years, end_date,
+             object_text, publication_date, publication_journal, representatives_count, establishments_count,
+             latest_event_date, latest_event_label, rne_updated_at, representatives, history, establishments
+      FROM rne_extracted_profiles
+      WHERE prospect_siren = $1
+    `,
+    prospect.siren,
+  ).catch(() => []);
   const rneSummary = buildRneSummary(rneMatchRows[0]);
+  const rneExtracted = rneExtractedRows[0];
+  const rneRepresentatives = asArray(rneExtracted?.representatives ?? rneSummary?.representatives);
+  const rneHistory = asArray(rneExtracted?.history ?? rneSummary?.history);
+  const rneEstablishments = asArray(rneExtracted?.establishments ?? rneSummary?.establishments);
+  const hasRneData = Boolean(rneExtracted || rneSummary);
   const webContactRows = await prisma.$queryRawUnsafe<
     Array<{
       status: string;
@@ -445,51 +481,51 @@ export default async function ProspectPage({ params }: { params: PageParams }) {
             )}
 
             <h3>Donnees INPI / RNE exploitees</h3>
-            {rneSummary ? (
+            {hasRneData ? (
               <div className="rnePanel">
                 <div className="rneOverview">
                   <div>
                     <span className="label">Denomination RNE</span>
-                    <strong>{rneSummary.companyName ?? prospect.name}</strong>
+                    <strong>{rneExtracted?.company_name ?? rneSummary?.companyName ?? prospect.name}</strong>
                   </div>
                   <div>
                     <span className="label">Creation / immatriculation</span>
-                    <strong>{formatDateText(rneSummary.creationDate)}</strong>
+                    <strong>{formatDateText(rneExtracted?.creation_date ?? rneSummary?.creationDate)}</strong>
                   </div>
                   <div>
                     <span className="label">Capital social</span>
-                    <strong>{rneSummary.capital ?? "Non renseigne"}</strong>
+                    <strong>{rneExtracted?.capital ?? rneSummary?.capital ?? "Non renseigne"}</strong>
                   </div>
                   <div>
                     <span className="label">Representants actifs</span>
-                    <strong>{rneSummary.representatives.length || rneMatchRows[0]?.nombre_representants_actifs || 0}</strong>
+                    <strong>{rneExtracted?.representatives_count ?? (rneRepresentatives.length || rneMatchRows[0]?.nombre_representants_actifs || 0)}</strong>
                   </div>
                   <div>
                     <span className="label">Etablissements ouverts RNE</span>
-                    <strong>{rneMatchRows[0]?.nombre_etablissements_ouverts ?? rneSummary.establishments.length}</strong>
+                    <strong>{rneExtracted?.establishments_count ?? rneMatchRows[0]?.nombre_etablissements_ouverts ?? rneEstablishments.length}</strong>
                   </div>
                   <div>
                     <span className="label">Derniere mise a jour RNE</span>
-                    <strong>{rneSummary.updatedAt ? rneSummary.updatedAt.toLocaleDateString("fr-FR") : "Non renseignee"}</strong>
+                    <strong>{formatDateText(rneExtracted?.rne_updated_at ?? rneSummary?.updatedAt)}</strong>
                   </div>
                 </div>
-                {rneSummary.object ? (
+                {(rneExtracted?.object_text ?? rneSummary?.object) ? (
                   <div className="rneTextBlock">
                     <span className="label">Objet social</span>
-                    <p>{rneSummary.object}</p>
+                    <p>{rneExtracted?.object_text ?? rneSummary?.object}</p>
                   </div>
                 ) : null}
-                {rneSummary.publication ? (
+                {(rneExtracted?.publication_date || rneExtracted?.publication_journal || rneSummary?.publication) ? (
                   <div className="rneTextBlock">
                     <span className="label">Publication legale</span>
-                    <p>{[formatDateText(rneSummary.publication.date), rneSummary.publication.journal, rneSummary.publication.type].filter(Boolean).join(" - ")}</p>
+                    <p>{[formatDateText(rneExtracted?.publication_date ?? rneSummary?.publication?.date), rneExtracted?.publication_journal ?? rneSummary?.publication?.journal, rneSummary?.publication?.type].filter(Boolean).join(" - ")}</p>
                   </div>
                 ) : null}
-                {rneSummary.representatives.length > 0 ? (
+                {rneRepresentatives.length > 0 ? (
                   <>
                     <h4>Representants RNE</h4>
                     <div className="rneRepresentativeList">
-                      {rneSummary.representatives.map((representative, index) => (
+                      {rneRepresentatives.map((representative: any, index) => (
                         <div key={`${representative.name}-${index}`}>
                           <span className="avatar">{initials(representative.name)}</span>
                           <div>
@@ -503,11 +539,11 @@ export default async function ProspectPage({ params }: { params: PageParams }) {
                     </div>
                   </>
                 ) : null}
-                {rneSummary.history.length > 0 ? (
+                {rneHistory.length > 0 ? (
                   <>
                     <h4>Historique juridique RNE</h4>
                     <div className="rneTimeline">
-                      {rneSummary.history.map((event, index) => (
+                      {rneHistory.map((event: any, index) => (
                         <div key={`${event.date}-${event.code}-${index}`}>
                           <strong>{formatDateText(event.date)}</strong>
                           <p>{event.label}</p>
@@ -517,11 +553,11 @@ export default async function ProspectPage({ params }: { params: PageParams }) {
                     </div>
                   </>
                 ) : null}
-                {rneSummary.establishments.length > 0 ? (
+                {rneEstablishments.length > 0 ? (
                   <>
                     <h4>Etablissements selon RNE</h4>
                     <div className="rneEstablishmentList">
-                      {rneSummary.establishments.map((establishment, index) => (
+                      {rneEstablishments.map((establishment: any, index) => (
                         <div key={`${establishment.siret}-${index}`}>
                           <strong>{establishment.label}</strong>
                           <p>{establishment.address}</p>
@@ -649,8 +685,12 @@ function initials(name: string) {
     .join("");
 }
 
-function formatDateText(value?: string | null) {
+function formatDateText(value?: string | Date | null) {
   if (!value) return "Non renseigne";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("fr-FR");
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString("fr-FR");
+}
+
+function asArray(value: unknown) {
+  return Array.isArray(value) ? value : [];
 }

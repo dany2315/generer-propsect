@@ -30,6 +30,7 @@ export type RneSummary = {
     label: string;
     siret?: string | null;
     activityCode?: string | null;
+    activityLabel?: string | null;
     address: string;
   }>;
 };
@@ -123,7 +124,7 @@ function extractEstablishments(morale: any): RneSummary["establishments"] {
   const establishments = [
     { label: "Etablissement principal", value: morale.etablissementPrincipal },
     ...(Array.isArray(morale.autresEtablissements)
-      ? morale.autresEtablissements.map((value: any, index: number) => ({ label: `Etablissement rattache ${index + 1}`, value }))
+      ? morale.autresEtablissements.map((value: any, index: number) => ({ label: establishmentLabel(value, index), value }))
       : []),
   ];
 
@@ -133,9 +134,26 @@ function extractEstablishments(morale: any): RneSummary["establishments"] {
       label: item.label,
       siret: item.value.descriptionEtablissement?.siret ?? null,
       activityCode: item.value.descriptionEtablissement?.codeApe ?? item.value.activites?.[0]?.codeApe ?? null,
+      activityLabel: item.value.activites?.[0]?.descriptionDetaillee ?? null,
       address: formatAddress(item.value.adresse),
     }))
     .slice(0, 8);
+}
+
+function establishmentLabel(value: any, index: number) {
+  const commercialName =
+    value.descriptionEtablissement?.nomCommercial ??
+    value.descriptionEtablissement?.enseigne ??
+    value.nomCommercial ??
+    value.enseigne;
+  if (commercialName) return String(commercialName);
+
+  const address = value.adresse;
+  const city = address?.commune;
+  const postalCode = address?.codePostal;
+  if (city || postalCode) return `Etablissement rattache - ${[postalCode, city].filter(Boolean).join(" ")}`;
+
+  return `Etablissement rattache ${index + 1}`;
 }
 
 function formatCapital(value?: number | string | null, currency?: string | null) {
