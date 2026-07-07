@@ -111,7 +111,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
     }
     if (enrichmentType === "rne") {
       const rows = await prisma.$queryRawUnsafe<Array<{ prospect_siren: string }>>(
-        "SELECT prospect_siren FROM rne_inpi_enrichments WHERE status = 'OK'",
+        "SELECT prospect_siren FROM rne_extracted_profiles",
       );
       filteredSirensByExternalEnrichment = rows.map((row) => row.prospect_siren);
     }
@@ -193,7 +193,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
       FROM prospect_establishments
     `).catch(() => [{ total: 0, prospects: 0, open: 0 }]),
     prisma.$queryRawUnsafe<Array<{ total: number }>>(`
-      SELECT COUNT(*)::int AS total FROM rne_inpi_enrichments WHERE status = 'OK'
+      SELECT COUNT(*)::int AS total FROM rne_extracted_profiles
     `).then((rows) => rows[0]?.total ?? 0).catch(() => 0),
     prisma.$queryRawUnsafe<Array<{ total: number }>>(`
       SELECT COUNT(*)::int AS total FROM sirene_complete_enrichments WHERE status = 'OK'
@@ -254,7 +254,12 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
           <h1>Prospects SCI actifs</h1>
           <p>Neon + Prisma + Next.js, collecte continue via worker TypeScript.</p>
         </div>
-        <ExportControls />
+        <div className="rowActions">
+          <Link href="/settings" className="button secondary">
+            Parametres de recherche
+          </Link>
+          <ExportControls />
+        </div>
       </header>
 
       <div className="content">
