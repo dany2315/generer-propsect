@@ -1,9 +1,44 @@
 name: Prospect workers
 
 on:
-  workflow_dispatch: {}
-  schedule:
-    - cron: "0 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      run_collect:
+        description: "Lancer la collecte SCI"
+        required: true
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      run_base_enrichment:
+        description: "Lancer l'enrichissement de base"
+        required: true
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      run_establishments:
+        description: "Extraire les etablissements"
+        required: true
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      run_web_contacts:
+        description: "Lancer l'ancien enrichissement web contacts"
+        required: true
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      run_contact_leads:
+        description: "Lancer les pistes web dirigeants"
+        required: true
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+      run_sirene:
+        description: "Lancer Sirene complet"
+        required: true
+        default: "false"
+        type: choice
+        options: ["false", "true"]
 
 concurrency:
   group: prospect-workers
@@ -22,34 +57,88 @@ jobs:
       SIRENE_BEARER_TOKEN: ${{ secrets.SIRENE_BEARER_TOKEN }}
     steps:
       - name: Checkout
+        if: >-
+          ${{
+            inputs.run_collect == 'true' ||
+            inputs.run_base_enrichment == 'true' ||
+            inputs.run_establishments == 'true' ||
+            inputs.run_web_contacts == 'true' ||
+            inputs.run_contact_leads == 'true' ||
+            inputs.run_sirene == 'true'
+          }}
         uses: actions/checkout@v4
 
       - name: Setup Node
+        if: >-
+          ${{
+            inputs.run_collect == 'true' ||
+            inputs.run_base_enrichment == 'true' ||
+            inputs.run_establishments == 'true' ||
+            inputs.run_web_contacts == 'true' ||
+            inputs.run_contact_leads == 'true' ||
+            inputs.run_sirene == 'true'
+          }}
         uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
 
       - name: Install dependencies
+        if: >-
+          ${{
+            inputs.run_collect == 'true' ||
+            inputs.run_base_enrichment == 'true' ||
+            inputs.run_establishments == 'true' ||
+            inputs.run_web_contacts == 'true' ||
+            inputs.run_contact_leads == 'true' ||
+            inputs.run_sirene == 'true'
+          }}
         run: npm ci
 
       - name: Generate Prisma client
+        if: >-
+          ${{
+            inputs.run_collect == 'true' ||
+            inputs.run_base_enrichment == 'true' ||
+            inputs.run_establishments == 'true' ||
+            inputs.run_web_contacts == 'true' ||
+            inputs.run_contact_leads == 'true' ||
+            inputs.run_sirene == 'true'
+          }}
         run: npm run db:generate
 
+      - name: Nothing selected
+        if: >-
+          ${{
+            inputs.run_collect != 'true' &&
+            inputs.run_base_enrichment != 'true' &&
+            inputs.run_establishments != 'true' &&
+            inputs.run_web_contacts != 'true' &&
+            inputs.run_contact_leads != 'true' &&
+            inputs.run_sirene != 'true'
+          }}
+        run: echo "Aucun worker selectionne. Rien ne sera lance."
+
       - name: Collecte SCI (recherche-entreprises.api.gouv.fr)
+        if: ${{ inputs.run_collect == 'true' }}
         run: npm run collect:once
 
       - name: Enrichissement de base
+        if: ${{ inputs.run_base_enrichment == 'true' }}
         run: npm run enrich:once
 
       - name: Extraction des etablissements
+        if: ${{ inputs.run_establishments == 'true' }}
         run: npm run extract:establishments:once
 
       - name: Enrichissement web (site officiel, email, LinkedIn)
+        if: ${{ inputs.run_web_contacts == 'true' }}
         run: npm run enrich:web:once
 
       - name: Decouverte de pistes de contact (dirigeants)
+        if: ${{ inputs.run_contact_leads == 'true' }}
         run: npm run discover:contacts:once
 
       - name: Enrichissement Sirene complet (no-op tant que SIRENE_BEARER_TOKEN n'est pas configure)
+        if: ${{ inputs.run_sirene == 'true' }}
         run: npm run enrich:sirene:once
